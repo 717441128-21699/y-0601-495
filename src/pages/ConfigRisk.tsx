@@ -23,6 +23,7 @@ import {
   Radar,
   CheckCircle2,
   XCircle,
+  Bell,
 } from 'lucide-react';
 import { useAppStore, type ConfigurationRisk, type RiskLevel, type RiskStatus } from '@/store/useAppStore';
 
@@ -67,6 +68,7 @@ const extraConfigs: ExtendedConfigRisk[] = [
     history: [
       { simulationId: 'sim-006', exceededAt: '2026-06-10T16:30:00Z', maxTemp: 1478.2, minChf: 1.28 },
     ],
+    chiefNotifications: [],
   },
   {
     id: 'risk-004',
@@ -80,6 +82,7 @@ const extraConfigs: ExtendedConfigRisk[] = [
     status: 'active',
     lastExceedAt: '',
     history: [],
+    chiefNotifications: [],
   },
   {
     id: 'risk-005',
@@ -97,6 +100,7 @@ const extraConfigs: ExtendedConfigRisk[] = [
       { simulationId: 'sim-008', exceededAt: '2026-06-08T11:40:00Z', maxTemp: 1479.5, minChf: 1.21 },
       { simulationId: 'sim-old-010', exceededAt: '2026-05-28T14:20:00Z', maxTemp: 1477.6, minChf: 1.25 },
     ],
+    chiefNotifications: [],
   },
   {
     id: 'risk-006',
@@ -115,6 +119,18 @@ const extraConfigs: ExtendedConfigRisk[] = [
       { simulationId: 'sim-011', exceededAt: '2026-06-01T10:25:00Z', maxTemp: 1501.8, minChf: 0.98 },
       { simulationId: 'sim-old-012', exceededAt: '2026-05-25T13:05:00Z', maxTemp: 1492.4, minChf: 1.02 },
       { simulationId: 'sim-old-013', exceededAt: '2026-05-18T09:30:00Z', maxTemp: 1485.6, minChf: 1.08 },
+    ],
+    suspendReason: '连续4次燃料温度超限，最大峰值1520.5K，超出安全限值1477K。已自动暂停该构型新任务提交。',
+    suspendedAt: '2026-06-05T09:00:00Z',
+    chiefNotifications: [
+      {
+        id: 'notif-002',
+        notifiedAt: '2026-06-05T09:00:00Z',
+        notifiedTo: '首席核安全工程师-王总',
+        message: '构型「快堆试验构型」(cfg-u1v2w3x4) 已连续4次出现燃料温度超限，已自动暂停该构型新任务提交。',
+        acknowledged: true,
+        acknowledgedAt: '2026-06-05T10:15:00Z',
+      },
     ],
   },
 ];
@@ -585,6 +601,62 @@ export default function ConfigRisk() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {selectedRisk.status === 'suspended' && selectedRisk.suspendReason && (
+                <div className="rounded-xl p-4 border border-danger/30 bg-danger/[0.08]">
+                  <div className="flex items-start gap-3">
+                    <PauseCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-danger">构型已暂停</span>
+                        {selectedRisk.suspendedAt && (
+                          <span className="text-xs text-white/50 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(selectedRisk.suspendedAt).toLocaleString('zh-CN')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/70 leading-relaxed">{selectedRisk.suspendReason}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedRisk.chiefNotifications && selectedRisk.chiefNotifications.length > 0 && (
+                <div className="rounded-xl p-4 border border-info/30 bg-info/[0.05]">
+                  <h4 className="text-sm font-semibold text-info mb-3 flex items-center gap-2">
+                    <Bell className="w-4 h-4" />
+                    首席核安全工程师通知记录
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedRisk.chiefNotifications.map((notif) => (
+                      <div key={notif.id} className="rounded-lg p-3 bg-white/[0.03] border border-white/10">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/80 font-medium">{notif.notifiedTo}</span>
+                            {notif.acknowledged ? (
+                              <span className="status-badge status-badge-success text-[10px] py-0.5 px-2">已确认</span>
+                            ) : (
+                              <span className="status-badge status-badge-warning text-[10px] py-0.5 px-2">待确认</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-white/40 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(notif.notifiedAt).toLocaleString('zh-CN')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/60 leading-relaxed">{notif.message}</p>
+                        {notif.acknowledged && notif.acknowledgedAt && (
+                          <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-white/40 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-success" />
+                            于 {new Date(notif.acknowledgedAt).toLocaleString('zh-CN')} 确认
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-xl p-4 border border-white/10 bg-white/[0.02]">
                   <div className="text-xs text-white/50 mb-1.5">累计模拟任务</div>
@@ -592,7 +664,7 @@ export default function ConfigRisk() {
                 </div>
                 <div className="rounded-xl p-4 border border-white/10 bg-white/[0.02]">
                   <div className="text-xs text-white/50 mb-1.5">累计超限次数</div>
-                  <div className={`font-display text-2xl font-bold ${selectedRisk.exceedCount >= 4 ? 'text-danger' : selectedRisk.exceedCount >= 2 ? 'text-warning' : 'text-success'}`}>
+                  <div className={`font-display text-2xl font-bold ${selectedRisk.exceedCount >= 3 ? 'text-danger' : selectedRisk.exceedCount >= 2 ? 'text-warning' : 'text-success'}`}>
                     {selectedRisk.exceedCount}
                   </div>
                 </div>

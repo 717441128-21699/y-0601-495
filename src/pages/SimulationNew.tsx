@@ -91,7 +91,8 @@ function formatSize(bytes: number): string {
 
 export default function SimulationNew() {
   const navigate = useNavigate();
-  const { createSimulation, currentUser } = useAppStore();
+  const { createSimulation, currentUser, configRisks } = useAppStore();
+  const [suspendedConfigWarning, setSuspendedConfigWarning] = useState<string | null>(null);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -195,12 +196,35 @@ export default function SimulationNew() {
     setFormData((p) => ({ ...p, [key]: null }));
   };
 
+  useEffect(() => {
+    if (formData.configName.trim()) {
+      const suspended = configRisks.find(
+        (r) => r.name === formData.configName.trim() && r.status === 'suspended'
+      );
+      if (suspended) {
+        setSuspendedConfigWarning(
+          `构型「${suspended.name}」已因连续${suspended.exceedCount}次燃料温度超限被暂停使用，${suspended.suspendReason ?? ''}`
+        );
+      } else {
+        setSuspendedConfigWarning(null);
+      }
+    } else {
+      setSuspendedConfigWarning(null);
+    }
+  }, [formData.configName, configRisks]);
+
   const validateStep = (step: number): boolean => {
     const e: Record<string, string> = {};
     if (step === 1) {
       if (!formData.taskName.trim()) e.taskName = '请输入任务名称';
       if (!formData.configName.trim()) e.configName = '请输入构型名称';
       if (!formData.reactorType) e.reactorType = '请选择反应堆类型';
+      const suspended = configRisks.find(
+        (r) => r.name === formData.configName.trim() && r.status === 'suspended'
+      );
+      if (suspended) {
+        e.configName = `该构型已被暂停，无法创建新任务`;
+      }
     }
     if (step === 2) {
       if (!formData.geometryFile || formData.geometryFile.progress < 100) {
@@ -547,6 +571,18 @@ export default function SimulationNew() {
                       <p className="mt-1.5 text-xs text-danger flex items-center gap-1">
                         <AlertCircle size={12} /> {errors.configName}
                       </p>
+                    )}
+                    {suspendedConfigWarning && (
+                      <div className="mt-3 p-4 rounded-lg bg-danger/10 border border-danger/40">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle size={16} className="text-danger shrink-0 mt-0.5" />
+                          <div className="text-xs text-white/80 space-y-1">
+                            <p className="font-bold text-danger">构型已被暂停使用</p>
+                            <p>{suspendedConfigWarning}</p>
+                            <p className="text-white/50 mt-2">如需继续使用该构型，请联系首席核安全工程师申请恢复。</p>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                   <div className="md:col-span-2">

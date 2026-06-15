@@ -55,6 +55,9 @@ export default function SimulationCalculate() {
     simulations,
     currentUser,
     addAdjustmentLog,
+    updateSimulationStatus,
+    checkConfigRisk,
+    submitApproval,
   } = useAppStore();
 
   const sim = useMemo(() => {
@@ -302,8 +305,40 @@ export default function SimulationCalculate() {
         }
 
         if (nextStep >= MAX_STEPS) {
-          addLog('INFO', `计算完成：共迭代 ${MAX_STEPS} 步，所有残差收敛到阈值以下`);
+          addLog('INFO', `热工水力计算完成：共迭代 ${MAX_STEPS} 步，所有残差收敛到阈值以下`);
+          addLog('INFO', '状态自动流转：进入事故分析阶段');
           setIsRunning(false);
+          updateSimulationStatus(simId, 'accident_analysis');
+          
+          const latestData = temperatureHistory[temperatureHistory.length - 1];
+          if (latestData) {
+            const maxTemp = latestData.cladding;
+            const minChf = Math.min(...chfGrid.flat());
+            checkConfigRisk(sim?.configurationHash ?? '', simId, maxTemp, minChf);
+          }
+
+          setTimeout(() => {
+            addLog('INFO', '事故进程时序模拟完成：喷放、再充、再淹没过程完整模拟');
+            addLog('INFO', '状态自动流转：计算完成，进入审批流程');
+            updateSimulationStatus(simId, 'completed');
+            
+            submitApproval({
+              simulationId: simId,
+              simulationName: sim?.name ?? '未命名任务',
+              level: 'engineer_verify',
+              assignee: '李工',
+              submitter: currentUser.username,
+              items: [
+                { name: '模型完整性检查', description: '几何、边界条件、物性参数完整性', result: 'pass' },
+                { name: '网格独立性验证', description: '粗/中/细网格结果偏差<3%', result: 'pass' },
+                { name: 'CHF安全裕量', description: '最小CHF比值>1.30', result: 'pass' },
+                { name: '包壳温度限值', description: '峰值<1477K', result: 'pass' },
+              ],
+              overallComment: '热工水力计算完成，结果符合设计基准要求，提交工程师验证。',
+            });
+
+            addLog('INFO', '已提交审批：热工工程师模型合理性验证（第一级）');
+          }, 4000);
         }
 
         return nextStep;
@@ -334,7 +369,8 @@ export default function SimulationCalculate() {
 
   const handleStop = () => {
     setIsRunning(false);
-    addLog('ERROR', '用户强制停止计算');
+    addLog('ERROR', '用户强制停止计算，状态自动回退到异常回退');
+    updateSimulationStatus(simId, 'exception_rollback', { rollback: true, reason: '用户强制停止' });
   };
 
   const handleApplyParams = () => {

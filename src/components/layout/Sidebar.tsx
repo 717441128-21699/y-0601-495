@@ -28,7 +28,7 @@ const navItems = [
   { to: '/reports', label: '报告管理', icon: FileText },
   { to: '/recommendations', label: '智能推荐', icon: Lightbulb },
   { to: '/configurations', label: '构型管控', icon: Shield },
-  { to: '/performance', label: '性能看板', icon: BarChart3 },
+  { to: '/analytics', label: '综合性能看板', icon: BarChart3 },
   { to: '/settings', label: '系统设置', icon: Settings },
 ];
 

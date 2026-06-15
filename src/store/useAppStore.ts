@@ -130,6 +130,15 @@ export type ReportType = 'steady_state' | 'accident_analysis' | 'sensitivity' | 
 export type SafetyRating = 'S' | 'A' | 'B' | 'C' | 'D';
 export type ApprovalProgressStatus = 'not_started' | 'level1_pending' | 'level1_approved' | 'level2_pending' | 'level2_approved' | 'rejected';
 
+export interface PushNotification {
+  id: string;
+  department: string;
+  pushedAt: string;
+  status: 'pending' | 'acknowledged';
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+}
+
 export interface SimulationReport {
   id: string;
   simulationId: string;
@@ -156,6 +165,10 @@ export interface SimulationReport {
     comment?: string;
   };
   approvedBy: string[];
+  pushNotifications: PushNotification[];
+  isDistributed: boolean;
+  distributedAt?: string;
+  recipientDepartments?: string[];
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high';
@@ -168,6 +181,15 @@ export interface RiskHistoryItem {
   minChf: number;
 }
 
+export interface ChiefNotification {
+  id: string;
+  notifiedAt: string;
+  notifiedTo: string;
+  message: string;
+  acknowledged: boolean;
+  acknowledgedAt?: string;
+}
+
 export interface ConfigurationRisk {
   id: string;
   name: string;
@@ -177,6 +199,9 @@ export interface ConfigurationRisk {
   status: RiskStatus;
   lastExceedAt: string;
   history: RiskHistoryItem[];
+  suspendReason?: string;
+  suspendedAt?: string;
+  chiefNotifications: ChiefNotification[];
 }
 
 export interface DailyStatistics {
@@ -475,7 +500,7 @@ const mockConfigRisks: ConfigurationRisk[] = [
     id: 'risk-001',
     name: '试验构型V2',
     hash: 'cfg-i9j0k1l2',
-    exceedCount: 4,
+    exceedCount: 3,
     riskLevel: 'high',
     status: 'suspended',
     lastExceedAt: daysAgo(2) + 'T08:55:10Z',
@@ -483,7 +508,18 @@ const mockConfigRisks: ConfigurationRisk[] = [
       { simulationId: 'sim-004', exceededAt: daysAgo(2) + 'T08:55:10Z', maxTemp: 1502.3, minChf: 0.92 },
       { simulationId: 'sim-old-001', exceededAt: daysAgo(10) + 'T14:22:00Z', maxTemp: 1491.8, minChf: 0.97 },
       { simulationId: 'sim-old-002', exceededAt: daysAgo(18) + 'T09:10:00Z', maxTemp: 1483.5, minChf: 1.03 },
-      { simulationId: 'sim-old-003', exceededAt: daysAgo(25) + 'T16:40:00Z', maxTemp: 1480.2, minChf: 1.05 },
+    ],
+    suspendReason: '连续3次燃料温度超限，最大峰值1502.3K，超出安全限值1477K。建议对燃料棒排列和冷却剂流道进行设计优化。',
+    suspendedAt: daysAgo(2) + 'T09:00:00Z',
+    chiefNotifications: [
+      {
+        id: 'notif-001',
+        notifiedAt: daysAgo(2) + 'T09:00:00Z',
+        notifiedTo: '首席核安全工程师-王总',
+        message: '构型「试验构型V2」(cfg-i9j0k1l2) 已连续3次出现燃料温度超限，已自动暂停该构型新任务提交。',
+        acknowledged: true,
+        acknowledgedAt: daysAgo(2) + 'T10:30:00Z',
+      },
     ],
   },
   {
@@ -498,6 +534,7 @@ const mockConfigRisks: ConfigurationRisk[] = [
       { simulationId: 'sim-001', exceededAt: daysAgo(0) + 'T10:12:35Z', maxTemp: 1487.5, minChf: 1.08 },
       { simulationId: 'sim-old-004', exceededAt: daysAgo(8) + 'T11:05:00Z', maxTemp: 1479.1, minChf: 1.12 },
     ],
+    chiefNotifications: [],
   },
 ];
 
@@ -669,6 +706,7 @@ const generateMockReports = (): SimulationReport[] => {
       };
     }
 
+    const isLevel2Approved = approval === 'level2_approved';
     reports.push({
       id: `rep-${String(i + 1).padStart(3, '0')}-${genId().slice(0, 6)}`,
       simulationId: `sim-${String(100 + i).padStart(3, '0')}`,
@@ -691,6 +729,29 @@ const generateMockReports = (): SimulationReport[] => {
       engineerVerify,
       chiefConfirm,
       approvedBy: approval === 'level2_approved' ? ['李工', '王总'] : approval === 'level1_approved' ? ['李工'] : [],
+      pushNotifications: isLevel2Approved
+        ? [
+            {
+              id: 'push-' + genId(),
+              department: '运行规程组',
+              pushedAt: daysAgo(Math.max(0, genDaysAgo - 2)) + 'T10:00:00Z',
+              status: i % 2 === 0 ? 'acknowledged' : 'pending',
+              acknowledgedAt: i % 2 === 0 ? daysAgo(Math.max(0, genDaysAgo - 2)) + 'T14:30:00Z' : undefined,
+              acknowledgedBy: i % 2 === 0 ? '运行规程组-刘组长' : undefined,
+            },
+            {
+              id: 'push-' + genId(),
+              department: '应急响应组',
+              pushedAt: daysAgo(Math.max(0, genDaysAgo - 2)) + 'T10:00:00Z',
+              status: i % 3 === 0 ? 'acknowledged' : 'pending',
+              acknowledgedAt: i % 3 === 0 ? daysAgo(Math.max(0, genDaysAgo - 2)) + 'T11:20:00Z' : undefined,
+              acknowledgedBy: i % 3 === 0 ? '应急响应组-陈队长' : undefined,
+            },
+          ]
+        : [],
+      isDistributed: isLevel2Approved,
+      distributedAt: isLevel2Approved ? daysAgo(Math.max(0, genDaysAgo - 2)) + 'T10:00:00Z' : undefined,
+      recipientDepartments: isLevel2Approved ? ['运行规程组', '应急响应组'] : undefined,
     });
   }
   return reports;
@@ -837,21 +898,129 @@ export const useAppStore = create<AppState>()(
       },
 
       approveItem: (id, signedBy, signComment) => {
-        set((s) => ({
-          approvals: s.approvals.map((a) =>
+        const state = get();
+        const approval = state.approvals.find((a) => a.id === id);
+        if (!approval) return;
+
+        let newApprovals: ApprovalItem[] = [];
+        let newReports: SimulationReport[] = state.reports;
+        let shouldUpdateReports = false;
+
+        set((s) => {
+          newApprovals = s.approvals.map((a) =>
             a.id === id
-              ? { ...a, status: 'approved', signedBy, signedAt: now(), signComment: signComment ?? a.signComment }
+              ? { ...a, status: 'approved' as const, signedBy, signedAt: now(), signComment: signComment ?? a.signComment }
               : a
-          ),
-        }));
+          );
+
+          if (approval.level === 'engineer_verify') {
+            const existingChief = newApprovals.find(
+              (a) => a.simulationId === approval.simulationId && a.level === 'chief_confirm'
+            );
+            if (!existingChief) {
+              const chiefApproval: ApprovalItem = {
+                id: 'app-' + genId(),
+                simulationId: approval.simulationId,
+                simulationName: approval.simulationName,
+                level: 'chief_confirm',
+                status: 'pending',
+                assignee: '王总',
+                submitter: signedBy,
+                items: [
+                  { name: '设计基准符合性', description: '结果符合RCC-M及GSR要求', result: 'pass' },
+                  { name: '事故分析预评估', description: '为事故分析提供合理初始条件', result: 'pass' },
+                  { name: '敏感性分析覆盖', description: '关键参数敏感性扫描完整', result: 'na' },
+                ],
+                overallComment: '热工工程师验证通过，提交总工最终确认。',
+                createdAt: now(),
+              };
+              newApprovals = [chiefApproval, ...newApprovals];
+            } else if (existingChief.status === 'rejected') {
+              const idx = newApprovals.findIndex((a) => a.id === existingChief.id);
+              newApprovals[idx] = { ...existingChief, status: 'pending', submitter: signedBy, createdAt: now() };
+            }
+          }
+
+          if (approval.level === 'chief_confirm') {
+            shouldUpdateReports = true;
+            const existingReport = s.reports.find((r) => r.simulationId === approval.simulationId);
+            let reportId = existingReport?.id;
+
+            if (!existingReport) {
+              const newReport = state.generateReport(approval.simulationId, signedBy);
+              newReports = [newReport, ...s.reports];
+              reportId = newReport.id;
+            }
+
+            if (reportId) {
+              newReports = newReports.map((r) =>
+                r.id === reportId
+                  ? {
+                      ...r,
+                      approvalStatus: 'level2_approved' as const,
+                      engineerVerify: r.engineerVerify ?? {
+                        status: 'approved',
+                        reviewer: approval.submitter,
+                        reviewedAt: s.approvals.find(
+                          (a) => a.simulationId === approval.simulationId && a.level === 'engineer_verify'
+                        )?.signedAt,
+                        comment: '模型验证充分，数据完整',
+                      },
+                      chiefConfirm: {
+                        status: 'approved',
+                        reviewer: signedBy,
+                        reviewedAt: now(),
+                        comment: signComment ?? '结果可信，安全裕量充足，同意归档。',
+                      },
+                      approvedBy: [...new Set([...(r.approvedBy ?? []), approval.submitter, signedBy])],
+                      pushNotifications: [
+                        {
+                          id: 'push-' + genId(),
+                          department: '运行规程组',
+                          pushedAt: now(),
+                          status: 'pending',
+                        },
+                        {
+                          id: 'push-' + genId(),
+                          department: '应急响应组',
+                          pushedAt: now(),
+                          status: 'pending',
+                        },
+                      ],
+                      isDistributed: true,
+                      distributedAt: now(),
+                      recipientDepartments: ['运行规程组', '应急响应组'],
+                    }
+                  : r
+              );
+            }
+          }
+
+          return shouldUpdateReports
+            ? { approvals: newApprovals, reports: newReports }
+            : { approvals: newApprovals };
+        });
       },
 
       rejectItem: (id, signedBy, signComment) => {
-        set((s) => ({
-          approvals: s.approvals.map((a) =>
-            a.id === id ? { ...a, status: 'rejected', signedBy, signedAt: now(), signComment } : a
-          ),
-        }));
+        set((s) => {
+          const approval = s.approvals.find((a) => a.id === id);
+          const newApprovals: ApprovalItem[] = s.approvals.map((a) =>
+            a.id === id ? { ...a, status: 'rejected' as const, signedBy, signedAt: now(), signComment } : a
+          );
+
+          if (approval?.level === 'engineer_verify') {
+            return {
+              approvals: newApprovals.map((a) =>
+                a.simulationId === approval.simulationId && a.level === 'chief_confirm' && a.status === 'pending'
+                  ? { ...a, status: 'rejected' as const, signedBy: signedBy, signedAt: now(), signComment: '前置审批被驳回，自动终止。' }
+                  : a
+              ),
+            };
+          }
+
+          return { approvals: newApprovals };
+        });
       },
 
       generateReport: (simulationId, generatedBy) => {
@@ -885,6 +1054,8 @@ export const useAppStore = create<AppState>()(
           generationDuration: +(60 + Math.random() * 180).toFixed(1),
           approvalStatus: 'not_started',
           approvedBy: [],
+          pushNotifications: [],
+          isDistributed: false,
         };
         set((s) => ({ reports: [report, ...s.reports] }));
         return report;
@@ -898,7 +1069,7 @@ export const useAppStore = create<AppState>()(
         let result: ConfigurationRisk | null = null;
         set((s) => {
           const historyItem: RiskHistoryItem = { simulationId, exceededAt: now(), maxTemp, minChf };
-          let risks = s.configRisks.map((r) => ({ ...r, history: [...r.history] }));
+          let risks = s.configRisks.map((r) => ({ ...r, history: [...r.history], chiefNotifications: [...(r.chiefNotifications ?? [])] }));
           const idx = risks.findIndex((r) => r.hash === hash);
           if (idx === -1) {
             const newRisk: ConfigurationRisk = {
@@ -910,19 +1081,34 @@ export const useAppStore = create<AppState>()(
               status: 'active',
               lastExceedAt: historyItem.exceededAt,
               history: [historyItem],
+              chiefNotifications: [],
             };
             risks = [newRisk, ...risks];
             result = newRisk;
           } else {
+            const previousStatus = risks[idx].status;
             risks[idx] = {
               ...risks[idx],
               exceedCount: risks[idx].exceedCount + 1,
               lastExceedAt: historyItem.exceededAt,
               history: [historyItem, ...risks[idx].history],
+              chiefNotifications: [...(risks[idx].chiefNotifications ?? [])],
             };
             const cnt = risks[idx].exceedCount;
-            risks[idx].riskLevel = cnt >= 4 ? 'high' : cnt >= 2 ? 'medium' : 'low';
-            if (cnt >= 4) risks[idx].status = 'suspended';
+            risks[idx].riskLevel = cnt >= 3 ? 'high' : cnt >= 2 ? 'medium' : 'low';
+            if (cnt >= 3 && previousStatus === 'active') {
+              risks[idx].status = 'suspended';
+              risks[idx].suspendReason = `连续${cnt}次燃料温度超限，最大峰值${maxTemp.toFixed(1)}K，超出安全限值${tempLimit}K。已自动暂停该构型新任务提交。`;
+              risks[idx].suspendedAt = now();
+              const notification: ChiefNotification = {
+                id: 'notif-' + genId(),
+                notifiedAt: now(),
+                notifiedTo: '首席核安全工程师',
+                message: `构型「${risks[idx].name}」(${hash}) 已连续${cnt}次出现燃料温度超限，已自动暂停该构型新任务提交，请及时处理。`,
+                acknowledged: false,
+              };
+              risks[idx].chiefNotifications.push(notification);
+            }
             result = risks[idx];
           }
           return { configRisks: risks };

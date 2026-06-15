@@ -14,9 +14,7 @@ import {
   Download,
   FileSpreadsheet,
   Share2,
-  Send,
   FileText,
-  Users,
   AlertTriangle,
   ArrowLeft,
   Thermometer,
@@ -42,7 +40,8 @@ const TOC = [
   { id: 'accident-timeline', label: '4. 事故进程时序', page: 7 },
   { id: 'safety-margin', label: '5. 安全裕量评估', page: 8 },
   { id: 'conclusion', label: '6. 结论与建议', page: 9 },
-  { id: 'appendix-a', label: '附录A：通道数据表', page: 10 },
+  { id: 'distribution', label: '7. 报告分发记录', page: 10 },
+  { id: 'appendix-a', label: '附录A：通道数据表', page: 11 },
 ];
 
 interface TempSliceProps {
@@ -291,7 +290,7 @@ const buildRadarOption = (m: SimulationReport['safetyMargins']) => {
   };
 };
 
-const PAGE_COUNT = 10;
+const PAGE_COUNT = 11;
 
 export default function ReportDetail() {
   const { id } = useParams();
@@ -432,10 +431,6 @@ export default function ReportDetail() {
     const url = window.location.href;
     navigator.clipboard?.writeText(url);
     toast('分享链接已复制到剪贴板');
-  };
-
-  const handleSend = (team: string) => {
-    toast(`已发送至${team}`);
   };
 
   const sim = simulations.find(s => s.id === report?.simulationId) ?? simulations[0];
@@ -907,6 +902,60 @@ export default function ReportDetail() {
                 </div>
               </div>
 
+              {/* 7. 报告分发记录 */}
+              {report?.pushNotifications && report.pushNotifications.length > 0 && (
+                <div ref={el => { sectionRefs.current['distribution'] = el; }}>
+                  <h2 className="text-2xl font-bold text-[#0B1E3F] pb-2 border-b-2 border-[#1565C0] mb-5 font-display">
+                    <span className="text-[#00D4FF] mr-2">07</span>报告分发记录
+                  </h2>
+                  <p className="text-[13px] text-gray-600 mb-4 leading-6">
+                    本报告经两级审批通过后，已自动推送至相关业务部门。以下是分发状态详情：
+                  </p>
+                  <div className="space-y-3">
+                    {report.pushNotifications.map((push) => (
+                      <div key={push.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              push.status === 'acknowledged' ? 'bg-[#00C853]/15' : 'bg-[#FF8C00]/15'
+                            }`}>
+                              {push.status === 'acknowledged' ? (
+                                <CheckCircleSVG color="#00C853" />
+                              ) : (
+                                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="#FF8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="M12 8v4M12 16h.01" />
+                                </svg>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0B1E3F] text-sm">{push.department}</div>
+                              <div className="text-[11px] text-gray-500">
+                                推送时间: {new Date(push.pushedAt).toLocaleString('zh-CN')}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] px-2 py-1 rounded font-semibold ${
+                            push.status === 'acknowledged'
+                              ? 'bg-[#00C853]/15 text-[#00C853]'
+                              : 'bg-[#FF8C00]/15 text-[#FF8C00]'
+                          }`}>
+                            {push.status === 'acknowledged' ? '已接收' : '待接收'}
+                          </span>
+                        </div>
+                        {push.status === 'acknowledged' && push.acknowledgedAt && (
+                          <div className="mt-2 pt-2 border-t border-gray-200 text-[11px] text-gray-500">
+                            <span className="font-medium text-gray-600">接收人:</span> {push.acknowledgedBy ?? '未知'}
+                            <span className="mx-2">·</span>
+                            <span className="font-medium text-gray-600">接收时间:</span> {new Date(push.acknowledgedAt).toLocaleString('zh-CN')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* 附录A：通道数据表 */}
               <div ref={el => { sectionRefs.current['appendix-a'] = el; }}>
                 <h2 className="text-2xl font-bold text-[#0B1E3F] pb-2 border-b-2 border-[#1565C0] mb-5 font-display">
@@ -1050,24 +1099,24 @@ export default function ReportDetail() {
               <Share2 className="w-4 h-4" />
               生成分享链接
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleSend('运行规程组')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 hover:border-primary/50 text-xs font-semibold transition-all"
-                title="发送至运行规程组"
-              >
-                <Users className="w-3.5 h-3.5" />
-                运行规程
-              </button>
-              <button
-                onClick={() => handleSend('应急响应组')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-warning/40 bg-warning/10 text-warning hover:bg-warning/15 hover:border-warning/60 text-xs font-semibold transition-all"
-                title="发送至应急响应组"
-              >
-                <Send className="w-3.5 h-3.5" />
-                应急响应
-              </button>
-            </div>
+            {report?.pushNotifications && report.pushNotifications.length > 0 && (
+              <div className="flex items-center gap-3 pl-3 border-l border-white/10">
+                <span className="text-xs text-white/50">推送状态:</span>
+                {report.pushNotifications.map((push) => (
+                  <div key={push.id} className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${
+                      push.status === 'acknowledged' ? 'bg-success' : 'bg-warning animate-pulse'
+                    }`} />
+                    <span className={`text-xs font-medium ${
+                      push.status === 'acknowledged' ? 'text-success' : 'text-warning'
+                    }`}>
+                      {push.department.replace('组', '')}
+                      {push.status === 'acknowledged' ? '✓' : '待收'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
